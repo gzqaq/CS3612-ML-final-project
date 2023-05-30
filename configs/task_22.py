@@ -20,7 +20,7 @@ def get_config() -> VAEConfig:
 
   model_config = VAEConfig(
     latent_dim=512,
-    image_size=32,
+    image_size=250,
     dtype=jnp.float32,
     kernel_init=orthogonal(np.sqrt(2)),
     bias_init=zeros_init(),

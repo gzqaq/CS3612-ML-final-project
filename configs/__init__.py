@@ -34,6 +34,7 @@ class VAEConfig:
   kernel_init: Any
   bias_init: Any
   dropout_rate: float
+  conv: BlockConfig
 
 @struct.dataclass
 class TrainConfig:

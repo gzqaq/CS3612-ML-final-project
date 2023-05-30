@@ -30,7 +30,7 @@ def maxpool(config: BlockConfig) -> Callable:
 
 def reparameterize(rng: KeyArray, mean: jax.Array, logvar: jax.Array) -> jax.Array:
   std = jnp.exp(0.5 * logvar)
-  eps = jax.random.normal(rng, logvar.shape)
+  eps = jax.random.normal(rng, logvar.shape, dtype=logvar.dtype)
 
   return mean + eps * std
 
@@ -46,7 +46,7 @@ class ConvPoolBlock(nn.Module):
     for _ in range(self.n_convs):
       inp = conv(config)(inp)
       inp = batchnorm(config, train)(inp)
-      inp = nn.relu(inp)
+      inp = nn.leaky_relu(inp)
 
     return maxpool(config)(inp)
   
@@ -69,7 +69,7 @@ class ConvResBlock(nn.Module):
     return inp + x
   
 
-class Encoder(nn.Module):
+class ConvEncoder(nn.Module):
   config: VAEConfig
 
   @nn.compact
@@ -80,10 +80,38 @@ class Encoder(nn.Module):
                     bias_init=self.config.bias_init)
     dropout = nn.Dropout(rate=self.config.dropout_rate,
                          deterministic=not train)
+    conv_t = partial(nn.Conv,
+                     dtype=self.config.dtype,
+                     use_bias=False,
+                     kernel_init=self.config.kernel_init)
     
+    inp = conv_t(8, (3, 3), (1, 1), "VALID")(inp)
+    inp = nn.leaky_relu(batchnorm(self.config.conv, train)(inp))
+    inp = conv_t(16, (3, 3), (1, 1), "VALID")(inp)
+    inp = nn.leaky_relu(batchnorm(self.config.conv, train)(inp))
     inp = inp.reshape(inp.shape[0], -1)
-    inp = nn.relu(dropout(dense(4096)(inp)))
-    inp = nn.relu(dropout(dense(2048)(inp)))
+    inp = nn.relu(dropout(dense(1024)(inp)))
+
+    mean = dense(self.config.latent_dim)(inp)
+    logvar = dense(self.config.latent_dim)(inp)
+
+    return mean, logvar
+
+
+class MLPEncoder(nn.Module):
+  config: VAEConfig
+
+  @nn.compact
+  def __call__(self, inp: jax.Array, train: bool = True) -> Tuple[jax.Array, jax.Array]:
+    dense = partial(nn.Dense,
+                    dtype=self.config.dtype,
+                    kernel_init=self.config.kernel_init,
+                    bias_init=self.config.bias_init)
+    dropout = nn.Dropout(rate=self.config.dropout_rate,
+                         deterministic=not train)
+
+    inp = inp.reshape(inp.shape[0], -1)
+    # inp = nn.relu(dropout(dense(2048)(inp)))
 
     mean = dense(self.config.latent_dim)(inp)
     logvar = dense(self.config.latent_dim)(inp)
@@ -103,8 +131,7 @@ class Decoder(nn.Module):
     dropout = nn.Dropout(rate=self.config.dropout_rate,
                          deterministic=not train)
     
-    inp = nn.relu(dropout(dense(2048)(inp)))
-    inp = nn.relu(dropout(dense(4096)(inp)))
+    # inp = nn.relu(dropout(dense(2048)(inp)))
     inp = dense(self.config.image_size ** 2 * 3)(inp)
 
     return inp.reshape(-1, self.config.image_size, self.config.image_size, 3)
@@ -114,19 +141,19 @@ class VAE(nn.Module):
   config: VAEConfig
 
   def setup(self):
-    self.encoder = Encoder(self.config)
-    self.decoder = Encoder(self.config)
+    self.encoder = MLPEncoder(self.config)
+    self.decoder = Decoder(self.config)
 
   def encode(self, inp: jax.Array) -> Tuple[jax.Array, jax.Array]:
     return self.encoder(inp, False)
   
   def decode(self, inp: jax.Array) -> jax.Array:
-    return self.decoder(inp, False)
+    return nn.sigmoid(self.decoder(inp, False))
   
   def __call__(self, reparam_rng: KeyArray, inp: jax.Array, train: bool = True) -> jax.Array:
     mean, logvar = self.encoder(inp, train)
     z = reparameterize(reparam_rng, mean, logvar)
-    output = self.decoder(z)
+    output = self.decoder(z, train)
 
     return output, mean, logvar
 
