@@ -11,9 +11,10 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_integer("n_epochs", 100, "Number of training epochs")
 flags.DEFINE_integer("batch_size", 256, "Minibatch size")
+flags.DEFINE_integer("seed", 42, "Random seed")
+flags.DEFINE_integer("n_classes", 10, "Useless")
 flags.DEFINE_float("clip_norm", 1.01, "Clip grad norm")
 flags.DEFINE_float("lr", 0.001, "Learning rate")
-flags.DEFINE_integer("seed", 42, "Random seed")
 flags.DEFINE_string("dtype", "float32", "Data type")
 flags.DEFINE_string("model_config", "task_2", "Name of model config")
 flags.DEFINE_string("run_name", "debug", "Name of this run")

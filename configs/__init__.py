@@ -37,6 +37,7 @@ class VAEConfig:
 
 @struct.dataclass
 class TrainConfig:
+  run_name: str
   seed: int
   dtype: Any
   n_classes: int
@@ -56,6 +57,7 @@ def parse_user_flags(flags) -> TrainConfig:
   model_config = __import__(f"configs.{flags.model_config}", fromlist=[""]).get_config()
 
   config = TrainConfig(
+    run_name=flags.run_name,
     seed=flags.seed,
     dtype=dtype,
     n_classes=flags.n_classes,

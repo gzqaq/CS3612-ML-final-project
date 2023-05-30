@@ -214,9 +214,6 @@ def train_vae(rng: KeyArray, config: TrainConfig, train_ds, val_ds):
     rng, _rng = jax.random.split(rng)
     metrics, comparison, sample = vae_eval(_rng, state, val_ds, z)
 
-    vae_utils.save_image(comparison, f"{out_dir}/reconstruction_{i_epoch}.png", nrow=8)
-    vae_utils.save_image(sample, f"{out_dir}/sample_{i_epoch}.png", nrow=8)
-
     print(f"| Epoch {i_epoch} | train | loss: {epoch_metrics['loss']:.3f} "
           f"| bce_loss: {epoch_metrics['bce_loss']:.3f} "
           f"| kld_loss: {epoch_metrics['kld_loss']:.3f}\n"
@@ -227,6 +224,9 @@ def train_vae(rng: KeyArray, config: TrainConfig, train_ds, val_ds):
     if metrics["loss"] < best_loss:
       best_loss = metrics["loss"]
       save_checkpoint(state, out_dir)
+
+      vae_utils.save_image(comparison, f"{out_dir}/reconstruction_{i_epoch}.png", nrow=8)
+      vae_utils.save_image(sample, f"{out_dir}/sample_{i_epoch}.png", nrow=8)
   
 
 def save_checkpoint(state: TrainState, out_dir: str) -> None:
