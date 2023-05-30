@@ -1,5 +1,5 @@
 from train import make_train, save_checkpoint
-from dataset import get_data
+from task1_dataset import get_data
 from configs import parse_user_flags
 
 import jax

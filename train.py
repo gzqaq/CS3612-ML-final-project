@@ -1,18 +1,72 @@
-from basic_types import Array, Minibatch, Metric, KeyArray
-from configs import TrainConfig
-from model import MyModel
+from basic_types import Array, Minibatch, Metric, KeyArray, Dict
+from configs import TrainConfig, task_2
+from model import MyModel, VAE
+import vae_utils
 
+import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
+import os
 from absl import logging
-from flax import struct
 from flax.training import train_state, checkpoints
 from typing import Callable, Tuple, Any
 
 
 class TrainState(train_state.TrainState):
   batch_stats: Any
+
+
+@jax.vmap
+def kl_div(mean: jax.Array, logvar: jax.Array) -> jax.Array:
+  return -0.5 * jnp.sum(1 + logvar - jnp.square(mean) - jnp.exp(logvar))
+
+@jax.vmap
+def binary_cross_entropy_with_logits(logits: jax.Array, labels: jax.Array) -> jax.Array:
+  logits = jax.nn.log_sigmoid(logits)
+  return -jnp.sum(labels * logits + (1. - labels) * jnp.log(-jnp.expm1(logits)))
+
+@jax.jit
+def vae_train_step(runner_state: Tuple[TrainState, KeyArray], minibatch: jax.Array) -> Tuple[TrainState, KeyArray]:
+  state, rng = runner_state
+  rng, reparam_rng = jax.random.split(rng)
+
+  def loss_fn(params):
+    recon, mean, logvar = state.apply_fn(
+      {"params": params},
+      reparam_rng, minibatch, True
+    )
+    bce_loss = binary_cross_entropy_with_logits(recon, minibatch).mean()
+    kld_loss = kl_div(mean, logvar).mean()
+    
+    return bce_loss + kld_loss, (bce_loss, kld_loss)
+  
+  (loss, aux_vals), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params)
+  train_metrics = {"loss": loss, "bce_loss": aux_vals[0], "kld_loss": aux_vals[1]}
+
+  return (state.apply_gradients(grads=grads), rng), train_metrics
+
+def vae_metrics(recon: jax.Array, image: jax.Array, mean: jax.Array, logvar: jax.Array) -> Dict[str, jax.Array]:
+  bce_loss = binary_cross_entropy_with_logits(recon, image).mean()
+  kld_loss = kl_div(mean, logvar).mean()
+
+  return {"loss": bce_loss + kld_loss,
+          "bce_loss": bce_loss,
+          "kld_loss": kld_loss}
+
+@jax.jit
+def vae_eval(rng: KeyArray, state: TrainState, val_inp: jax.Array, latent_vec: jax.Array) -> jax.Array:
+  def eval_model(vae_model: VAE):
+    recon, mean, logvar = vae_model(rng, val_inp, False)
+    comparison = jnp.concatenate([val_inp[:8].reshape(-1, 250, 250, 3),
+                                  recon[:8].reshape(-1, 250, 250, 3)])
+    gen_images = vae_model.decode(latent_vec)
+    metrics = vae_metrics(recon, val_inp, mean, logvar)
+
+    return metrics, comparison, gen_images
+  
+  return nn.apply(eval_model, VAE(task_2.get_config()))({"params": state.params})
 
 
 def make_train(config: TrainConfig,
@@ -123,6 +177,56 @@ def make_train(config: TrainConfig,
             "rng": runner_state[1]}
   
   return train
+
+
+def train_vae(rng: KeyArray, config: TrainConfig, train_ds, val_ds):
+  out_dir = os.path.join("outputs", config.run_name)
+  os.makedirs(out_dir, exist_ok=True)
+
+  model = VAE(config.model)
+  rng, init_rng, dropout_rng, reparam_rng = jax.random.split(rng, 4)
+  init_inp = jnp.ones((1, 250, 250, 3), dtype=config.dtype)
+  params = model.init({"params": init_rng,
+                       "dropout": dropout_rng},
+                      reparam_rng, init_inp)["params"]
+  tx = optax.chain(optax.clip_by_global_norm(config.clip_norm),
+                   optax.adam(config.lr))
+  state = TrainState.create(apply_fn=model.apply,
+                            params=params,
+                            tx=tx,
+                            batch_stats=None)
+  
+  rng, _rng = jax.random.split(rng)
+  z = jax.random.normal(_rng, (64, config.model.latent_dim))
+  best_loss = float(np.inf)
+
+  for i_epoch in range(config.n_epochs):
+    epoch_metrics = {"loss": [], "bce_loss": [], "kld_loss": []}
+    for minibatch in train_ds:
+      (state, rng), metrics = vae_train_step((state, rng), jnp.array(minibatch, dtype=config.dtype))
+      
+      for k in epoch_metrics.keys():
+        epoch_metrics[k].append(metrics[k].item())
+    
+    for k in epoch_metrics.keys():
+      epoch_metrics[k] = np.mean(epoch_metrics[k])
+    
+    rng, _rng = jax.random.split(rng)
+    metrics, comparison, sample = vae_eval(_rng, state, val_ds, z)
+
+    vae_utils.save_image(comparison, f"{out_dir}/reconstruction_{i_epoch}.png", nrow=8)
+    vae_utils.save_image(sample, f"{out_dir}/sample_{i_epoch}.png", nrow=8)
+
+    print(f"| Epoch {i_epoch} | train | loss: {epoch_metrics['loss']:.3f} "
+          f"| bce_loss: {epoch_metrics['bce_loss']:.3f} "
+          f"| kld_loss: {epoch_metrics['kld_loss']:.3f}\n"
+          f"| Epoch {i_epoch} |  val  | loss: {metrics['loss']:.3f} "
+          f"| bce_loss: {metrics['bce_loss']:.3f} "
+          f"| kld_loss: {metrics['kld_loss']:.3f}\n")
+    
+    if metrics["loss"] < best_loss:
+      best_loss = metrics["loss"]
+      save_checkpoint(state, out_dir)
   
 
 def save_checkpoint(state: TrainState, out_dir: str) -> None:

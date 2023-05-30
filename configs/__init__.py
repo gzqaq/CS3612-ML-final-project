@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 from flax import struct
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, Union
 
 
 @struct.dataclass
@@ -29,13 +29,11 @@ class ModelConfig:
 @struct.dataclass
 class VAEConfig:
   latent_dim: int
-  conv_out_feat: int
   image_size: int
   dtype: Any
   kernel_init: Any
   bias_init: Any
   dropout_rate: float
-  conv_config: BlockConfig
 
 @struct.dataclass
 class TrainConfig:
@@ -46,7 +44,7 @@ class TrainConfig:
   batch_size: int
   lr: float
   clip_norm: float
-  model: ModelConfig
+  model: Union[ModelConfig, VAEConfig]
 
 
 def parse_user_flags(flags) -> TrainConfig:
