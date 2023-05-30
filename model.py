@@ -1,7 +1,8 @@
-from configs import ModelConfig, BlockConfig
+from basic_types import Tuple, Callable, KeyArray
+from configs import VAEConfig, ModelConfig, BlockConfig
 
-from typing import Callable
 import jax
+import jax.numpy as jnp
 import flax.linen as nn
 from functools import partial
 
@@ -26,6 +27,12 @@ def maxpool(config: BlockConfig) -> Callable:
                  window_shape=config.pool_window_shape,
                  strides=config.pool_strides,
                  padding=config.pool_padding)
+
+def reparameterize(rng: KeyArray, mean: jax.Array, logvar: jax.Array) -> jax.Array:
+  std = jnp.exp(0.5 * logvar)
+  eps = jax.random.normal(rng, logvar.shape)
+
+  return mean + eps * std
 
 
 class ConvPoolBlock(nn.Module):
@@ -61,6 +68,68 @@ class ConvResBlock(nn.Module):
 
     return inp + x
   
+
+class Encoder(nn.Module):
+  config: VAEConfig
+
+  @nn.compact
+  def __call__(self, inp: jax.Array, train: bool = True) -> Tuple[jax.Array, jax.Array]:
+    dense = partial(nn.Dense,
+                    dtype=self.config.dtype,
+                    kernel_init=self.config.kernel_init,
+                    bias_init=self.config.bias_init)
+    dropout = nn.Dropout(rate=self.config.dropout_rate,
+                         deterministic=not train)
+    
+    inp = inp.reshape(inp.shape[0], -1)
+    inp = nn.relu(dropout(dense(4096)(inp)))
+    inp = nn.relu(dropout(dense(2048)(inp)))
+
+    mean = dense(self.config.latent_dim)(inp)
+    logvar = dense(self.config.latent_dim)(inp)
+
+    return mean, logvar
+
+
+class Decoder(nn.Module):
+  config: VAEConfig
+
+  @nn.compact
+  def __call__(self, inp: jax.Array, train: bool = True) -> jax.Array:
+    dense = partial(nn.Dense,
+                    dtype=self.config.dtype,
+                    kernel_init=self.config.kernel_init,
+                    bias_init=self.config.bias_init)
+    dropout = nn.Dropout(rate=self.config.dropout_rate,
+                         deterministic=not train)
+    
+    inp = nn.relu(dropout(dense(2048)(inp)))
+    inp = nn.relu(dropout(dense(4096)(inp)))
+    inp = dense(self.config.image_size ** 2 * 3)(inp)
+
+    return inp.reshape(-1, self.config.image_size, self.config.image_size, 3)
+
+
+class VAE(nn.Module):
+  config: VAEConfig
+
+  def setup(self):
+    self.encoder = Encoder(self.config)
+    self.decoder = Encoder(self.config)
+
+  def encode(self, inp: jax.Array) -> Tuple[jax.Array, jax.Array]:
+    return self.encoder(inp, False)
+  
+  def decode(self, inp: jax.Array) -> jax.Array:
+    return self.decoder(inp, False)
+  
+  def __call__(self, reparam_rng: KeyArray, inp: jax.Array, train: bool = True) -> jax.Array:
+    mean, logvar = self.encoder(inp, train)
+    z = reparameterize(reparam_rng, mean, logvar)
+    output = self.decoder(z)
+
+    return output, mean, logvar
+
 
 class MyModel(nn.Module):
   config: ModelConfig

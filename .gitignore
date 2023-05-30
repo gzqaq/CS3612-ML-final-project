@@ -2,7 +2,7 @@
 *.ipynb
 
 # Dataset
-dataset
+*dataset
 
 # Outputs
 metrics
