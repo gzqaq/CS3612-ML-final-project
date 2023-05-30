@@ -1,0 +1,9 @@
+# Scratch
+*.ipynb
+
+# Dataset
+dataset
+
+# Outputs
+metrics
+outputs
