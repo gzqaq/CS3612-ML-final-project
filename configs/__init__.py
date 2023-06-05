@@ -26,6 +26,7 @@ class ModelConfig:
   conv_pool: BlockConfig
   conv_res: BlockConfig
 
+
 @struct.dataclass
 class VAEConfig:
   latent_dim: int
@@ -35,6 +36,7 @@ class VAEConfig:
   bias_init: Any
   dropout_rate: float
   conv: BlockConfig
+
 
 @struct.dataclass
 class TrainConfig:
@@ -51,22 +53,25 @@ class TrainConfig:
 
 def parse_user_flags(flags) -> TrainConfig:
   if isinstance(flags.dtype, str):
-    dtype = {"float32": jnp.float32,
-                   "float64": jnp.float64,
-                   "float16": jnp.float16,
-                   "bfloat16": jnp.bfloat16}[flags.dtype]
-  model_config = __import__(f"configs.{flags.model_config}", fromlist=[""]).get_config()
+    dtype = {
+        "float32": jnp.float32,
+        "float64": jnp.float64,
+        "float16": jnp.float16,
+        "bfloat16": jnp.bfloat16,
+    }[flags.dtype]
+  model_config = __import__(f"configs.{flags.model_config}",
+                            fromlist=[""]).get_config()
 
   config = TrainConfig(
-    run_name=flags.run_name,
-    seed=flags.seed,
-    dtype=dtype,
-    n_classes=flags.n_classes,
-    n_epochs=flags.n_epochs,
-    batch_size=flags.batch_size,
-    lr=flags.lr,
-    clip_norm=flags.clip_norm,
-    model=model_config
+      run_name=flags.run_name,
+      seed=flags.seed,
+      dtype=dtype,
+      n_classes=flags.n_classes,
+      n_epochs=flags.n_epochs,
+      batch_size=flags.batch_size,
+      lr=flags.lr,
+      clip_norm=flags.clip_norm,
+      model=model_config,
   )
   print(config)
 

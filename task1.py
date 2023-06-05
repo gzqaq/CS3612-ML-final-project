@@ -21,16 +21,18 @@ flags.DEFINE_string("dtype", "float32", "Data type")
 flags.DEFINE_string("model_config", "task_1", "Name of model config")
 flags.DEFINE_string("run_name", "debug", "Name of this run")
 
+
 def save_train_result(res):
   save_pth = os.path.join("outputs", FLAGS.run_name)
   os.makedirs(save_pth, exist_ok=True)
 
   save_checkpoint(res["train_state"], save_pth)
-  
+
   metrics = jax.tree_map(np.array, res["metrics"])
   with open(os.path.join(save_pth, "metrics.pkl"), "wb") as fd:
     pickle.dump(metrics, fd)
   logging.info("Saved metrics to %s", os.path.join(save_pth, "metrics.pkl"))
+
 
 def main(_):
   config = parse_user_flags(FLAGS)
@@ -41,10 +43,12 @@ def main(_):
   test_imgs = jnp.einsum("bchw->bhwc", jnp.array(X_test, config.dtype))
   test_labels = jnp.array(y_test, dtype=config.dtype)
 
-  train = make_train(config,
-                     (jnp.array(train_imgs), jnp.array(train_labels)),
-                     (jnp.array(test_imgs), jnp.array(test_labels)))
-  
+  train = make_train(
+      config,
+      (jnp.array(train_imgs), jnp.array(train_labels)),
+      (jnp.array(test_imgs), jnp.array(test_labels)),
+  )
+
   rng = jax.random.PRNGKey(config.seed)
   res = jax.jit(train)(rng)
 

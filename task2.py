@@ -34,7 +34,7 @@ def main(_):
   train_size = int(ds.shape[0] - 8) // config.batch_size * config.batch_size
   train_ds = ds[:train_size]
   val_ds = ds[train_size:]
-  
+
   train_vae(rng, config, train_ds, val_ds)
 
 
