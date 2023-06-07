@@ -1,7 +1,7 @@
 from basic_types import Array, Minibatch, Metric, KeyArray, Dict
 from configs import TrainConfig, VAEConfig
 from model import MyModel, VAE, ConvVAE
-import vae_utils
+import utils.vae as vae_utils
 
 import flax.linen as nn
 import jax
