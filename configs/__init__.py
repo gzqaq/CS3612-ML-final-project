@@ -73,6 +73,5 @@ def parse_user_flags(flags) -> TrainConfig:
       clip_norm=flags.clip_norm,
       model=model_config,
   )
-  print(config)
 
   return config

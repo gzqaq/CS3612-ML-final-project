@@ -12,7 +12,7 @@ def PCA(data: Array, k: int = 2) -> Array:
   eig_vals, eig_vecs = jnp.linalg.eigh(cov_mat)
 
   top_k = eig_vecs[eig_vals.argsort()][-k:]
-  projected_data = jnp.dot(data_centered, top_k)
+  projected_data = jnp.dot(data_centered, top_k.T)
 
   return projected_data
 
@@ -53,7 +53,7 @@ def tsne(
 
     return jnp.exp(entropy)
 
-  def search_optimal_sigmas(dist, perplexity, max_iter):
+  def search_optimal_sigmas(dist, perplexity, max_iter=1000):
     eval_fn = lambda sigma: compute_perplexity(dist, sigma)
     search_range = jnp.repeat(jnp.array([[0.0, 1000.0]]), dist.shape[0], 0)
 
