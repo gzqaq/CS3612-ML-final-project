@@ -11,7 +11,7 @@ def get_config() -> VAEConfig:
       conv_kernel_size=(3, 3),
       conv_strides=1,
       conv_padding="SAME",
-      dtype=jnp.float32,
+      dtype=jnp.bfloat16,
       kernel_init=orthogonal(np.sqrt(2)),
       pool_window_shape=(2, 2),
       pool_strides=(2, 2),
@@ -19,9 +19,9 @@ def get_config() -> VAEConfig:
   )
 
   model_config = VAEConfig(
-      latent_dim=512,
-      image_size=32,
-      dtype=jnp.float32,
+      latent_dim=1024,
+      image_size=250,
+      dtype=jnp.bfloat16,
       kernel_init=orthogonal(np.sqrt(2)),
       bias_init=zeros_init(),
       dropout_rate=0.1,
